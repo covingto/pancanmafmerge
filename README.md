@@ -1,0 +1,2 @@
+# pancanmafmerge
+A repo for code specifically tailored to the merger of the TCGA PanCan VCF (per-caller) files into a MAF file.  This repository borrows from code available in other repositories and has some custom code to handle the merger.  The project's main purpose is simply to do the merge for this one project and therefore has no features to make it more generic or maintainable beyond this goal.
