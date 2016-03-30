@@ -42,7 +42,7 @@ def filter(fpath, caller, tmpdir):
             input': fpath,
             'output': outputfpath},
             shell = True)
-        return outputfpath},
+        return outputfpath
     elif caller.lower() == "varscans":
 	logger.info("Applying VarScan SNP filter to %s", fpath)
 	subprocess.check_call('perl %(PACKAGE)s/vcf2vcf.pl --add-filter %(input)s %(output)s' %{
@@ -50,7 +50,7 @@ def filter(fpath, caller, tmpdir):
             input': fpath,
             'output': outputfpath},
             shell = True)
-        return outputfpath},
+        return outputfpath
     elif caller.lower() == "varscani":
         logger.info("Applying VarScan INDEL filter to %s", fpath)
         subprocess.check_call('perl %(PACKAGE)s/vcf2vcf.pl --add-filter %(input)s %(output)s' %{
@@ -58,7 +58,7 @@ def filter(fpath, caller, tmpdir):
             input': fpath,
             'output': outputfpath},
             shell = True)
-        return outputfpath},
+        return outputfpath
     else:
         return fpath
 
