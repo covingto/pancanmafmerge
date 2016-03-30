@@ -1,0 +1,3 @@
+[submodule "vcf2maf"]
+	path = vcf2maf
+	url = https://github.com/covingto/vcf2maf.git
