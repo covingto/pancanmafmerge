@@ -2,6 +2,8 @@
 import os, os.path, sys
 import logging
 import hgsc_vcf
+import tempfile, shutil
+
 logger = logging.getLogger()                                                               
 logger.setLevel(logging.DEBUG)                                                             
 ch = logging.StreamHandler()                                                               
@@ -30,10 +32,11 @@ class FileSplitter(object):
         self.seqdict = seqdict
         self.nrecs = nrecs
         self._fileindex = 0
+        self.tmpdir = tempfile.mkdtemp()
     
     def _initialize(self, chrom):
         self._fileindex += 1
-        writer = hgsc_vcf.Writer(open('%s.%s.split.vcf' % (chrom, str(self._fileindex)), 'w'), self.reader.header)
+        writer = hgsc_vcf.Writer(open(os.path.join(self.tmpdir, '%s.%s.split.vcf' % (chrom, str(self._fileindex))), 'w'), self.reader.header)
         writer.write_header()
         return writer
 
@@ -125,6 +128,8 @@ def main(args):
     merger.writer.write_header()
     merger.merge()
     merger.writer.fobj.close()
+    
+    shutil.rmtree(splitter.tmpdir)
 
     logger.info("Done")
 

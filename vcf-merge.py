@@ -154,7 +154,7 @@ class MultiVCFReader(object):
 
     def generate_header(self):
         newHeader = hgsc_vcf.VCFHeader()
-        newHeader.samples = self.infiles.values()[0].reader.header.samples
+        newHeader.samples = ['NORMAL', 'PRIMARY'] # deterministic sample names now
         for infile in self.infiles.values():
             newHeader.headers += infile.reader.header.headers # append all of the headers together, who cares, we can sort out later
         newHeader.add_header('##COMMAND=<ID=vcf-merge>')
