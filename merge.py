@@ -37,25 +37,25 @@ def filter(fpath, caller, tmpdir):
         return outputfpath
     elif caller.lower() == "somaticsniper":
         logger.info("Applying SomaticSniper filter to %s", fpath)
-        subprocess.check_call('perl %(PACKAGE)s/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s' %{
+        subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s' %{
             'PACKAGE': PACKAGEDIR,
-            input': fpath,
+            'input': fpath,
             'output': outputfpath},
             shell = True)
         return outputfpath
     elif caller.lower() == "varscans":
-	logger.info("Applying VarScan SNP filter to %s", fpath)
-	subprocess.check_call('perl %(PACKAGE)s/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s' %{
+        logger.info("Applying VarScan SNP filter to %s", fpath)
+        subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s' %{
             'PACKAGE': PACKAGEDIR,
-            input': fpath,
+            'input': fpath,
             'output': outputfpath},
             shell = True)
         return outputfpath
     elif caller.lower() == "varscani":
         logger.info("Applying VarScan INDEL filter to %s", fpath)
-        subprocess.check_call('perl %(PACKAGE)s/vcf2vcf.pl --add-filter --input-vcf %(input)s --input-vcf %(output)s' %{
-            'PACKAGE': PACKAGEDIR,	
-            input': fpath,
+        subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --input-vcf %(output)s' %{
+            'PACKAGE': PACKAGEDIR,
+            'input': fpath,
             'output': outputfpath},
             shell = True)
         return outputfpath
