@@ -208,7 +208,7 @@ def annotate(fpath, tmpdir):
         logger.info("Skipping vep annotation because %s exists", vepannotation)
     else:
         logger.info("Processing vep annotation")
-        subprocess.check_call('export PERL5LIB=/hgsc_software/cancer-analysis/code/vep-82:/users/covingto/perl5/lib/perl5:$PERL5LIB && export PATH=/hgsc_software/cancer-analysis/code/vep-82/htslib:$PATH && /hgsc_software/perl/perl-5.16.2/bin/perl /hgsc_software/cancer-analysis/code/vep-82/ensembl-tools-release-82/scripts/variant_effect_predictor/variant_effect_predictor.pl --dir /hgsc_software/cancer-analysis/code/vep-82/cache/human/grch37 --format vcf --everything -i %(input)s -o %(output)s --cache --vcf --force_overwrite --check_existing --allow_non_variant --buffer_size 100 --offline --fork 4' % {
+        subprocess.check_call('export PERL5LIB=/hgsc_software/cancer-analysis/code/vep-82:/users/covingto/perl5/lib/perl5:$PERL5LIB && export PATH=/hgsc_software/cancer-analysis/code/vep-82/htslib:$PATH && /hgsc_software/perl/perl-5.18.2/bin/perl /hgsc_software/cancer-analysis/code/vep-82/ensembl-tools-release-82/scripts/variant_effect_predictor/variant_effect_predictor.pl --dir /hgsc_software/cancer-analysis/code/vep-82/cache/human/grch37 --format vcf --everything -i %(input)s -o %(output)s --cache --vcf --force_overwrite --check_existing --allow_non_variant --buffer_size 100 --offline --fork 4' % {
             'input': fpath,
             'output': tmpfile},
             shell = True)
