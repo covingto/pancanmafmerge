@@ -41,11 +41,14 @@ class MetaRecord(object):
     def __cmp__(self, other):
         si = self._seq_pos(self.record)
         oi = self._seq_pos(other.record)
+        return si - oi
+        '''
+        block commented out because we don't actually care that the alts aren't the same???
         if si != oi:
             return si - oi
         else:
             return sum([hash(a) for a in self.record['ALT']]) - sum([hash(a) for a in other.record['ALT']])
-
+        '''
     def __repr__(self):
         return "<record chr=%s, pos=%s, alt=%s>" % (self.record['CHROM'], self.record['POS'], self.record['ALT'])
 

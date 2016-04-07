@@ -56,7 +56,7 @@ def dispatch(dpath, resultpath):
         else:
             callers.append(gpat.upper())
     
-    CMD = 'echo "python %(PACKAGE)s/merge.py --vcfs %(vcfs)s --callers %(callers)s --tmpdir %(tmpdir)s %(output)s" | msub -V -A proj-dwpancan -q analysis -N %(sample)s -d $PWD -j oe -o %(output)s.log -l nodes=1:ppn=4,mem=32g' % {
+    CMD = 'echo "python %(PACKAGE)s/merge.py --vcfs %(vcfs)s --callers %(callers)s --tmpdir %(tmpdir)s %(output)s" | msub -V -A proj-dwpancan -q analysis -N %(sample)s -d $PWD -j oe -o %(output)s.log -l nodes=1:ppn=2,mem=16g' % {
         'output': output,
         'sample': os.path.basename(dpath),
         'tmpdir': tmpdir,
