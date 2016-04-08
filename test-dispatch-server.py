@@ -57,10 +57,94 @@ class TestDispatchServer(unittest.TestCase):
             cmd, log = j
             self.assertTrue(isinstance(cmd, basestring), "cmd was not a string")
             self.assertTrue(isinstance(log, basestring), "log was not a string")
+    
+    def test_ping(self):
+        job = dispatch_server.Job('test', '.', 'echo "test"', 'test.log')
+        # add some things to the queue
+        with self.dispatcher.job_list_lock:
+            self.dispatcher.job_list['test'] = job
+        self.assertTrue('test' in self.dispatcher.job_list, "didn't add the test job to the queue")
+        response = dispatch_server.DispatchTCPClientServer.client(self.dispatcher.ip, self.dispatcher.port, {'request': 'ping', 'host': '0.0.0.0', 'port': '64941'})
+        self.assertTrue(response is not None, "no response")
+        self.assertTrue('action' in response, "response missing action: %s" % str(response))
+        self.assertTrue(response.get('action') != 'reject', "action was rejected: %s" % str(response))
+        for k in ('cmd', 'log', 'jobkey'):
+            self.assertTrue(k in response, "response missing %s" % k)
+
+
+
+    def test_worker(self):
+        # start a worker
+        worker = dispatch_server.Worker(self.dispatcher.ip, self.dispatcher.port)
+        with worker.job_lock: # we lock here so that we can control the worker with more granularity instead of letting her go wild
+            ## test a passing job
+            job = dispatch_server.Job('test', '.', 'echo "test"', 'test.log')
+            # add some things to the queue
+            with self.dispatcher.job_list_lock:
+                self.dispatcher.job_list['test'] = job
+            self.assertTrue('test' in self.dispatcher.job_list, "didn't add the test job to the queue")
+            response = worker.ping()
+            self.assertTrue(response['action'] != 'reject', "response was rejected: %s" % str(response))
+            self.assertTrue('cmd' in response, "response did not contain a cmd: %s" % str(response))
+            self.assertTrue(worker.job is not None, "The worker didn't get a job")
+            self.assertTrue('test' == worker._job_key, 'Worker did not get the right job key; %s' % worker._job_key)
+            # allow the job to finish
+            while True:
+                worker.job.poll()
+                if worker.job.returncode is not None:
+                    worker.check_job()
+                    break # break from the while loop, this means that the job is done
+            self.assertTrue(worker.job is None, "The worker did not reset the job")
+            self.assertFalse('test' in self.dispatcher.job_list, "The dispatcher still has the job, this should have been removed on done")
+            self.assertFalse('test' in self.dispatcher.problems, "The return code should have been 0 for this test, but instead the key is in problems: %s" % str(self.dispatcher.problems))
+            ## test a failing job
+            job = dispatch_server.Job('test', '.', 'exit 10', 'test.log')
+            # add some things to the queue
+            with self.dispatcher.job_list_lock:
+                self.dispatcher.job_list['test'] = job
+            self.assertTrue('test' in self.dispatcher.job_list, "didn't add the test job to the queue")
+            worker.ping()
+            self.assertTrue('test' == worker._job_key, 'Worker did not get the right job key; %s' % worker._job_key)
+            # allow the job to finish
+            while True:
+                worker.job.poll()
+                if worker.job.returncode is not None:
+                    worker.check_job()
+                    break # break from the while loop, this means that the job is done
+            self.assertTrue(worker.job is None, "The worker did not reset the job")
+            self.assertFalse('test' in self.dispatcher.job_list, "The dispatcher still has the job, this should have been removed on done")
+            self.assertTrue('test' in self.dispatcher.problems, "The return code should have been 10 for this test, but the key is not in problems: %s" % str(self.dispatcher.problems))
+            # test a kill
+            job = dispatch_server.Job('test', '.', 'exit 10', 'test.log')
+            # add some things to the queue
+            with self.dispatcher.job_list_lock:
+                self.dispatcher.job_list['test'] = job
+            self.assertTrue('test' in self.dispatcher.job_list, "didn't add the test job to the queue")
+            worker.ping()
+            self.assertTrue('test' == worker._job_key, 'Worker did not get the right job key; %s' % worker._job_key)
+            worker.process_kill({})
+            self.assertTrue(worker.job is None, "Kill was called and the job is not None")
+
+        worker.shutdown()
+        worker.server_close()
+        worker._shutdown = True
 
 
     def test_communication(self):
-        pass
-
+        ## test a passing job
+        job = dispatch_server.Job('test', '.', 'echo "test"', 'test.log')
+        # add some things to the queue
+        with self.dispatcher.job_list_lock:
+            self.dispatcher.job_list['test'] = job
+        self.assertTrue('test' in self.dispatcher.job_list, "didn't add the test job to the queue")
+        ## test status
+        response = dispatch_server.DispatchTCPClientServer.client(self.dispatcher.ip, self.dispatcher.port, {'request': 'status'})
+        self.assertTrue('action' in response, 'response missing action')
+        self.assertTrue(response.get('action') == 'accepted', 'action not accepted: %s' % str(response))
+        self.assertTrue('data' in response, 'response missing data')
+        self.assertTrue('problems' in response, 'response missing problems')
+        self.assertTrue(len(response.get('data')) > 0, 'no data in data key: %s' % str(response))
+        
+        
 if __name__ == "__main__":
     unittest.main()

@@ -49,6 +49,7 @@ def recv_timeout(the_socket,timeout=5):
     return ''.join(total_data)
 
 class DispatchTCPClientServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+    allow_reuse_address = True # we let the address to be resused when we are done with it
     def __init__(self, server_address, bind_and_activate=True):
         class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
             parent = self
@@ -89,7 +90,7 @@ class Worker(DispatchTCPClientServer):
         DispatchTCPClientServer.__init__(self, server_address)
         
         self._shutdown = False
-
+        self._job_key = None
         self.dip = dip
         self.dport = dport
 
@@ -175,10 +176,10 @@ class Worker(DispatchTCPClientServer):
                 self.shutdown()
                 self.server_close()
                 self._shutdown = True
-
+                return response
             elif not ('cmd' in response and 'log' in response and 'jobkey' in response):
                 logger.error("response is not formatted correctly: %s", response)
-                return
+                return response
             else:
                 logger.info(response['cmd'])
                 logger.info("Starting job, log will be in %s", response['log'])
@@ -186,6 +187,7 @@ class Worker(DispatchTCPClientServer):
                 self.loghandle.write('Executing %s\n' % response['cmd'])
                 self._job_key = response['jobkey']
                 self.job = subprocess.Popen(response['cmd'], shell = True, stdout = self.loghandle, stderr = self.loghandle)
+                return response
         except:
             logger.exception("Hit an exception during ping")
             raise
@@ -196,8 +198,11 @@ class Worker(DispatchTCPClientServer):
             logger.info("Job complete, return status was %s", self.job.returncode)
             self.loghandle.write("Job complete\n")
             self.loghandle.close()
+            retcode = self.job.returncode
+            jkey = self._job_key
+            self._job_key = None
             self.job = None # clear the job, if it errored we should know about that by some other means
-            self.client(self.dip, self.dport, {'request': 'done', 'returncode': self.job.returncode, 'jobkey': self._job_key})
+            self.client(self.dip, self.dport, {'request': 'done', 'returncode': retcode, 'jobkey': jkey})
 
     def is_shutdown(self):
         return self._shutdown
@@ -242,10 +247,21 @@ class Dispatcher(DispatchTCPClientServer):
                 return self.process_done(request)
             elif request['request'] == 'problems':
                 return self.process_problems(request)
+            elif request['request'] == 'status':
+                return self.process_status(request)
             else:
                 return {'action': 'reject', 'reason': 'non-standard request'}
         except Exception as inst:
             return {'action': 'reject', 'reason': str(inst)}
+    
+    def process_status(self, request):
+        return {'action': 'accepted',
+                'data': [{
+                    'key': k, 
+                    'resultpath': job.resultpath, 
+                    'cmd': job.cmd, 'log': job.log} for k, job in self.job_list.items()],
+                'problems': [{'key': k, 'resultpath': job.resultpath, 'cmd': job.cmd, 'log': job.log} for k, job in self.problems.items()]
+                }
 
     def process_queue(self, request):
         for k in ('resultpath', 'cmd', 'log', 'jobkey'):
@@ -281,7 +297,7 @@ class Dispatcher(DispatchTCPClientServer):
                 logger.info("Sending job command")
                 job.set_running(**request)
                 # return and terminate the iteration, we only set one job
-                return {'action': 'accepted', 'cmd': job.get_cmd(), 'log': job.get_log()}
+                return {'action': 'accepted', 'cmd': job.get_cmd(), 'log': job.get_log(), 'jobkey': k}
             return {'action': 'reject', 'reason': 'no jobs'}
 
     def process_done(self, request):
@@ -306,7 +322,8 @@ class PathFinder(object):
         self.basedir = basedir
         with open(pathmap_fpath, 'r') as fi:
             reader = csv.DictReader(fi, delimiter = '\t')
-            self._map = {r[pathmap_pkey]:r for r in reader}
+            self._map = {r[pathmap_pkey].strip('/'):r for r in reader}
+        self.keys = self._map.keys()
     
     ##
     # @param key - the key used to extract records from the _map, if no match returns None
@@ -319,7 +336,10 @@ class PathFinder(object):
             paths = []
             callers = []
             for k, v in self._caller_map.items():
-                paths.append(os.path.join(self.basedir, r[k]))
+                fpath = os.path.join(self.basedir, r[k])
+                if not os.path.isfile(fpath):
+                    raise ValueError("%s is not a path" % fpath)
+                paths.append(fpath)
                 callers.append(v)
             return paths, callers
 
@@ -356,12 +376,11 @@ class Job(object):
     @staticmethod
     def dispatch(jobkey, resultpath, fmaps):
         logger.info("Processing %s", jobkey)
-        outdir = os.path.join(resultpath, jobkey)
+        outdir = os.path.join(os.path.abspath(resultpath), jobkey)
         output = os.path.join(outdir, 'merged.maf')
         tmpdir = os.path.join(outdir, 'tmp')
         if os.path.isfile(output):
-            logger.info("%s has already been generated, remove if you want to run again", output)
-            return
+            raise ValueError("%s has already been generated, remove if you want to run again", output)
         else:
             # make the directories that we need to write to
             for d in (outdir, tmpdir):
@@ -374,7 +393,7 @@ class Job(object):
             # fmap is a PathFinder instance that will allow us to map a jobkey to a set of file paths
             pl, cl = fmap.get_paths(jobkey)
             if pl is None:
-                return # we can't process this one
+                raise ValueError("%s is not a key in a file map" % jobkey)
             vcfs += pl
             callers += cl
         
@@ -401,11 +420,18 @@ def start_worker(args):
 ##
 # build a job, the Job is just a container of variables
 def build_jobs(jobkeys, resultdir, fmaps):
-    for jobkey in jobkeys: 
-        t = Job.dispatch(jobkey, resultdir, fmaps)
-        if t is not None:
-            cmd, log = t
-            yield Job(jobkey, resultdir, cmd, log)
+    with open("problem-keys.txt", 'w') as fo:
+        writer = csv.DictWriter(fo, fieldnames = ['jobkey', 'reason'], delimiter = '\t')
+        writer.writeheader()
+        for jobkey in jobkeys: 
+            try:
+                t = Job.dispatch(jobkey, resultdir, fmaps)
+                if t is not None:
+                    cmd, log = t
+                    yield Job(jobkey, resultdir, cmd, log)
+            except Exception as inst:
+                writer.writerow({'jobkey': jobkey, 'reason': str(inst)})
+
 
 def build_fmaps(cpath):
     fmaps = []
@@ -426,21 +452,20 @@ def build_fmaps(cpath):
 # future calls to queue may add more jobs to our list
 def start_dispatcher(args):
     dispatcher = Dispatcher()
-    if args.config:
-        # build the fmaps based on the config
-        build_fmaps(args.config)
-    logger.info("Started dispatcher: host: %s, port: %s", dispatcher.ip, dispatcher.port)
     args.dip = dispatcher.ip
     args.dport = dispatcher.port
-    queue(args)
+    if args.config:
+        queue(args)
     while not dispatcher.is_shutdown():
         time.sleep(10)
+    logger.info("Started dispatcher: host: %s, port: %s", dispatcher.ip, dispatcher.port)
 
 def queue(args):
-    if not (args.dip and args.dport and args.resultdir and args.indirs):
+    if not (args.dip and args.dport and args.resultdir and args.config):
         logger.error("Must specify all options, see help")
         sys.exit(1)
-    for job in build_jobs(args.indirs, args.resultdir, fmaps):
+    fmaps = build_fmaps(args.config)
+    for job in build_jobs(fmaps[0].keys, args.resultdir, fmaps):
         response = DispatchTCPClientServer.client(args.dip, args.dport, {
             'request': 'queue',
             'jobkey': job.jobkey,
@@ -471,13 +496,13 @@ if __name__ == '__main__':
     parser_worker.set_defaults(func = start_worker)
 
     parser_dispatcher.add_argument('--resultdir', type = str, help = 'result dir')
-    parser_dispatcher.add_argument('--indirs', type = str, nargs = '+', help = 'directories to serve to the workers')
+    parser_dispatcher.add_argument('--config', type = str, help = 'config file path')
     parser_dispatcher.set_defaults(func = start_dispatcher)
 
     parser_queue.add_argument('--dip', type = str, help = 'dispatcher ip')
     parser_queue.add_argument('--dport', type = int, help = 'dispatcher port number')
     parser_queue.add_argument('--resultdir', type = str, help = 'result dir')
-    parser_queue.add_argument('--indirs', type = str, nargs = '+', help = 'directories to serve to the workers')
+    parser_queue.add_argument('--config', type = str, help = 'config file path')
     parser_queue.set_defaults(func = queue)
     
     args = parser.parse_args()

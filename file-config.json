@@ -1,0 +1,13 @@
+{"fmaps": [
+    {"basepath": "/stornext/snfs7/can/data-downloads/tcga-mc3/full_v2_2",
+     "fmap": "/stornext/snfs7/can/data-downloads/tcga-mc3/full_v2_2/dna-nexus-manifest.txt",
+     "pkey": "key",
+     "mapping": {"pindel": "PINDEL", "radia": "RADIA", "varscansnp": "VARSCANS", "varscanindel": "VARSCANI", "somaticsniper": "SOMATICSNIPER", "muse": "MUSE"}
+     },
+    {"basepath": "/stornext/snfs7/can/data-downloads/tcga-mc3/broad/alldata",
+     "fmap": "/stornext/snfs7/can/data-downloads/tcga-mc3/full_v2_2/pairing_of_best_bams_2016-04-05-1.txt",
+     "pkey": "dnanexus_pair_id",
+     "mapping": {"broad_mutect_vcf": "MUTECT", "broad_indelocator_vcf": "INDELOCATOR"}
+     }
+    ]
+}

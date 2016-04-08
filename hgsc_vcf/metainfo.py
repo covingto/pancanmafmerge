@@ -64,7 +64,7 @@ class ComplexHeaderLine(HeaderLine):
             items = []
             for f_i in ComplexHeaderLine.PATTERN.split(str(f_s))[1::2]: # start with index = 1 and go every other one
                 if '=' not in f_i:
-                    raise ValueError("Field param %s does not contain '='" % f_i)
+                    f_i = f_i + '=True'
                 k_i, v_i = f_i.split('=', 1)
                 v_iq = re.match(ComplexHeaderLine.QUOTED, v_i)
                 if v_iq:
