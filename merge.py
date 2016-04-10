@@ -66,6 +66,15 @@ def filter(fpath, caller, tmpdir):
             shell = True)
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+    elif caller.lower() == 'radia':
+        logger.info("Applying RADIA filter to %s", fpath)
+        subprocess.check_call('python %(PACKAGE)s/filter_radia.py %(input)s %(output)s' % {
+            'PACKAGE': PACKAGEDIR,
+            'input': fpath,
+            'output': tmpfile},
+            shell = True)
+        shutil.move(tmpfile, outputfpath)
+        return outputfpath
     elif caller.lower() == "somaticsniper":
         nid, tid, nbar, tbar = getTNids(fpath)
         logger.info("Applying SomaticSniper filter to %s", fpath)
@@ -139,12 +148,18 @@ def getTNids(fpath):
     if primaryline:
         primarysplit = hgsc_vcf.metainfo.ComplexHeaderLine(string = primaryline[0])
     else:
-        raise ValueError("Could not find ID=PRIMARY in file %s, start again :)" % fpath)
+        # check if there is a METASTATIC sample (SKCM for example)
+        primaryline = [l for l in sample_headers if 'ID=METASTATIC' in l or 'ID=RECURRANCE' in l]
+        if primaryline:
+            primarysplit = hgsc_vcf.metainfo.ComplexHeaderLine(string = primaryline[0])
+            # we did find a METASTATIC sample, convert the field_header
+        else:
+            raise ValueError("Could not find ID=PRIMARY or ID=METASTATIC or ID=RECURRANCE in file %s, start again :)" % fpath)
     if normalline:
         normalsplit = hgsc_vcf.metainfo.ComplexHeaderLine(string = normalline[0])
     else:
         raise ValueError("Could not find ID=NORMAL in the file %s, start again :)" % fpath)
-    samples = [s for s in field_header[9:] if s in ('NORMAL', 'PRIMARY', 'TUMOR', normalsplit.fields['SampleTCGABarcode'], primarysplit.fields['SampleTCGABarcode'])]
+    samples = [s for s in field_header[9:] if s in ('NORMAL', 'PRIMARY', 'TUMOR', 'METASTATIC', 'RECURRANCE', normalsplit.fields['SampleTCGABarcode'], primarysplit.fields['SampleTCGABarcode'])]
     if len(samples) < 2:
         raise ValueError("Fewer than 2 samples found: %s" % samples)
     elif len(samples) > 2:

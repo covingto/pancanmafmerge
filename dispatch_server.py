@@ -465,7 +465,15 @@ def queue(args):
         logger.error("Must specify all options, see help")
         sys.exit(1)
     fmaps = build_fmaps(args.config)
-    for job in build_jobs(fmaps[0].keys, args.resultdir, fmaps):
+    if args.jobkeyfile:
+        with open(args.jobkeyfile, 'r') as fi:
+            jobkeys = []
+            for line in fi.readlines():
+                lsplit = [c.strip() for c in line.split()]
+                jobkeys.append(lsplit[0])
+    else:
+        jobkeys = fmaps[0].keys
+    for job in build_jobs(jobkeys, args.resultdir, fmaps):
         response = DispatchTCPClientServer.client(args.dip, args.dport, {
             'request': 'queue',
             'jobkey': job.jobkey,
@@ -497,12 +505,14 @@ if __name__ == '__main__':
 
     parser_dispatcher.add_argument('--resultdir', type = str, help = 'result dir')
     parser_dispatcher.add_argument('--config', type = str, help = 'config file path')
+    parser_dispatcher.add_argument('--jobkeyfile', type = str, help = 'job keys to add')
     parser_dispatcher.set_defaults(func = start_dispatcher)
 
     parser_queue.add_argument('--dip', type = str, help = 'dispatcher ip')
     parser_queue.add_argument('--dport', type = int, help = 'dispatcher port number')
     parser_queue.add_argument('--resultdir', type = str, help = 'result dir')
     parser_queue.add_argument('--config', type = str, help = 'config file path')
+    parser_queue.add_argument('--jobkeyfile', type = str, help = 'job keys to add')
     parser_queue.set_defaults(func = queue)
     
     args = parser.parse_args()

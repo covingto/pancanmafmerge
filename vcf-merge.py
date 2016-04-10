@@ -58,6 +58,10 @@ class MetaReader(object):
         self.caller = fobj.name
         # get the normal and primary sample ids
         sampleMapping = {l.fields.get('ID'):l.fields.get('SampleTCGABarcode') for l in self.reader.header.get_headers('SAMPLE')}
+        if 'PRIMARY' not in sampleMapping and 'METASTATIC' in sampleMapping:
+            sampleMapping['PRIMARY'] = sampleMapping['METASTATIC']
+        elif 'PRIMARY' not in sampleMapping and 'RECURRANCE' in sampleMapping:
+            sampleMapping['PRIMARY'] = sampleMapping['RECURRANCE']
         logger.info("Sample mapping for %s: %s", fobj.name, sampleMapping)
         self.normal = sampleMapping['NORMAL']
         self.primary = sampleMapping['PRIMARY']
@@ -83,8 +87,15 @@ class MetaReader(object):
                     new = None
                 if 'NORMAL' not in n['SAMPLES']:
                     n['SAMPLES']['NORMAL'] = n['SAMPLES'][self.normal]
-                if 'PRIMARY' not in n['SAMPLES']:
-                    n['SAMPLES']['PRIMARY'] = n['SAMPLES'][self.primary]
+                if 'PRIMARY' not in n['SAMPLES']: 
+                    if self.primary in n['SAMPLES']:
+                        n['SAMPLES']['PRIMARY'] = n['SAMPLES'][self.primary]
+                    elif 'METASTATIC' in n['SAMPLES']:
+                        n['SAMPLES']['PRIMARY'] = n['SAMPLES']['METASTATIC']
+                    elif 'RECURRANCE' in n['SAMPLES']:
+                        n['SAMPLES']['PRIMARY'] = n['SAMPLES']['RECURRANCE']
+                    else:
+                        raise ValueError("Can't find the PRIMARY sample")
                 if n['SAMPLES']['NORMAL']['GT'][0] not in  ('0/0', '0', '.', './.'):
                     continue
                 if 'PASS' not in n['FILTER']:
@@ -119,6 +130,10 @@ class MultiVCFReader(object):
         self.outwriter = hgsc_vcf.Writer(open(self.outfile, 'w'), self.generate_header())
         # get the normal and primary sample ids
         sampleMapping = {l.fields.get('ID'):l.fields.get('SampleTCGABarcode') for l in self.infiles.values()[0].reader.header.get_headers('SAMPLE')}
+        if 'PRIMARY' not in sampleMapping and 'METASTATIC' in sampleMapping:
+            sampleMapping['PRIMARY'] = sampleMapping['METASTATIC']
+        elif 'PRIMARY' not in sampleMapping and 'RECURRANCE' in sampleMapping:
+            sampleMapping['PRIMARY'] = sampleMapping['RECURRANCE']
         self.normal = sampleMapping['NORMAL']
         self.primary = sampleMapping['PRIMARY']
         self.keymap = dict(zip(infiles, keys))
