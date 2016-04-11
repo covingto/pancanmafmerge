@@ -24,7 +24,7 @@ Running
 =======
 
 merge.py
-++++++++
+________
 
 merge.py is the main application of this project and is used to merge VCF files from a variety of formats into a single VCF file and then converts that into a MAF file.  The following is an example of the command line for running merge.py
 
@@ -42,7 +42,7 @@ merge.py performs the following opperations (in this order):
 6. vcf2maf: the merged and annotated vcf is converted using vcf2maf (with some modifications, see the fork covingto/vcf2maf)
 
 dispatch_server.py
-++++++++++++++++++
+__________________
 
 Understandably, formatting, monitorying, and error revovery with such a large project is essential.  It is envisioned that this system may be run to merge together very large collections of VCF files across different infrastructures.  To that end, `dispatch_server.py` helps to organize and run the large job sets for this project.
 
