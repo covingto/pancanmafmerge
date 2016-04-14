@@ -1,7 +1,7 @@
 # pancanmafmerge
 
-Dependencies
-============
+## Dependencies
+
 A repo of code used to merge [TCGA PancanAtlas VCFs](https://wiki.nci.nih.gov/x/2gcYAw) from various somatic callers, into a deduplicated merged multisample [MAF format](https://wiki.nci.nih.gov/x/eJaPAQ). This repository borrows from code available in other repositories and has some custom code to handle the merger. The project's main purpose is simply to do the merge for this one project and therefore has no features to make it more generic or maintainable beyond this goal.
 
 Members of the TCGA Network can get more information about the PancanAtlas effort [at this link](https://wiki.nci.nih.gov/display/TCGAM/PanCancerAtlas).
@@ -20,11 +20,9 @@ CREATE INDEX rsid on dbsnpvalstat (rsid);
 You should also have the required interpreters and virtual machines installed:
 perl, python, java, jython
 
-Running
-=======
+## Running
 
-merge.py
-________
+### merge.py
 
 merge.py is the main application of this project and is used to merge VCF files from a variety of formats into a single VCF file and then converts that into a MAF file.  The following is an example of the command line for running merge.py
 
@@ -41,15 +39,13 @@ merge.py performs the following opperations (in this order):
 5. annotation: the merged file is first annotated with VEP and then with a post-VEP canannotation utility that adds COSMIC, context, and dbSNP information to the merged VCF
 6. vcf2maf: the merged and annotated vcf is converted using vcf2maf (with some modifications, see the fork covingto/vcf2maf)
 
-dispatch_server.py
-__________________
+### dispatch_server.py
 
 Understandably, formatting, monitorying, and error revovery with such a large project is essential.  It is envisioned that this system may be run to merge together very large collections of VCF files across different infrastructures.  To that end, `dispatch_server.py` helps to organize and run the large job sets for this project.
 
 Three main functions exist within `dispatch_server.py`; dispatcher, worker, and queue.
 
-dispatcher
-----------
+#### dispatcher
 
 To begin you must set up manifest files containing a primary key (same across all manifests) and file paths to locate the vcf files for your project (relative to some base directory).  Then, you must set up a configuration file which is used by dispatcher to load a job list.  An outline of the configuration file is:
 
@@ -68,8 +64,7 @@ To begin you must set up manifest files containing a primary key (same across al
 
 Once you have loaded the dispatcher, you are ready to start workers.
 
-worker
-------
+#### worker
 
 The worker should be given the host and port of the dispatcher and be started in an environment with about 2 CPUs and 16gb of available RAM and have access to the file system that contains the vcf data and output directories.
 
@@ -77,8 +72,7 @@ Once started, the workers will communicate with the dispatcher to take jobs.  If
 
 Workers stop working once there are no more jobs.
 
-Reporting bugs
-==============
+## Reporting bugs
 
 What?! You found bugs?
 

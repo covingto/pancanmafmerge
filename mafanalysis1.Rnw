@@ -1,0 +1,331 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{glossaries}
+\usepackage{helvet}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{sidecap}
+\usepackage{framed}
+\usepackage{booktabs}
+\usepackage{environ}
+\usepackage{lineno}
+\usepackage{pgfgantt}
+\usepackage{url}
+\usepackage[margin=0.5in]{geometry}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[moderate,charwidths=normal]{savetrees}
+\usepackage[font=scriptsize,labelfont=bf]{caption}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+\section{Introduction}
+
+The following are some quality control metrics and analyses for MAF mergers for the pancanmafmerge project merged MAF files.
+This provides a general QC output but is not a replacement for interactive data exploration and analysis that should be performed in any data mining activity.
+
+\section{Load libraries}
+
+Load in the required libraries for analysis, load the command args, and load the MAF file from the command args.
+
+<<load>>=
+require(entropy)
+require(ggplot2)
+require(plyr)
+require(reshape2)
+# note when running that absolute paths should be used for the input files
+SWEAVEDOC <- args[1]
+MAFFILE <- args[2]
+GERMLINESITES <- args[3]
+print(args)
+
+mm <- read.delim(MAFFILE, comment.char = '#')
+
+# re-header the maf file here, these are the manipulations that we will do to it that will be used later
+callers <- levels(factor(unlist(strsplit(gsub('\\*', '', as.character(mm$CENTERS)), "\\|"))))
+chromosomes <- levels(mm$Chromosome)
+
+orderfactor <- function(f){
+  tb <- table(f)
+  return(factor(f, levels = names(tb[order(tb, decreasing = T)])))
+}
+
+countCharOccurrences <- function(char, s) {
+  s2 <- gsub(char,"",s)
+  return (nchar(s) - nchar(s2))
+}
+
+entropylist <- lapply(levels(mm$CONTEXT), function(context){
+  return(entropy(sapply(c('A', 'T', 'C', 'G'), function(char){
+    return(countCharOccurrences(char, context))
+  })))
+})
+# context_entropy <- mm$CONTEXT
+# levels(context_entropy) <- unlist(entropylist)
+# mm$context_entropy <- as.numeric(as.character(context_entropy))
+
+# reorder sample barcode by frequency
+mm$Tumor_Sample_Barcode <- with(mm, orderfactor(Tumor_Sample_Barcode))
+mm$TAF <- with(mm, t_alt_count / t_depth)
+mm$NAF <- with(mm, n_alt_count / n_depth)
+mm$hqdbsnp <- grepl('by1000|byFre|byHap', mm$DBVS)
+mm <- na.omit(mm)
+mm$CENTERS <- factor(with(mm, sapply(as.character(CENTERS), function(x){
+  s <- unlist(strsplit(x, '\\|'))
+  s <- sort(s[!duplicated(s)])
+  return(paste(s, collapse = '|'))
+})))
+@
+
+\section{Basic Sample Assessment}
+
+This section contains some basic assessments of the variants observed in each sample as a way of identifying outlier samples.
+
+\subsection{SNV and InDel comparison}
+
+In general, we expect that samples will have relatively more SNV (SNP) compared to insertions and deletions.  Let's see if we get that.
+
+<<snvindel>>=
+sidsum <- ddply(mm, .(Tumor_Sample_Barcode), function(df){
+    # how many snv and indel do we see?
+    tb <- table(df$Variant_Type)
+    return(data.frame(snv = tb['SNP'],
+        ins = tb['INS'],
+        del = tb['DEL'],
+        indel = tb['INS'] + tb['DEL'],
+        other = sum(tb) - sum(tb['SNP'], tb['INS'], tb['DEL'])
+    ))
+})
+sidsum$indelratio <- with(sidsum, indel / (snv + indel))
+msidsum <- melt(sidsum, measure.vars = c('snv', 'ins', 'del', 'indel'))
+msidsum$isSNV <- msidsum$variable == 'snv'
+print(summary(sidsum))
+print(subset(sidsum, indelratio > 0.4))
+@
+
+\begin{figure}[h]
+\centering
+<<fig_indelcounts, fig = TRUE, echo = FALSE, height=8, width=8>>=
+ggplot(subset(msidsum, variable != 'indel'), aes(x=Tumor_Sample_Barcode, y=value, fill = variable)) + 
+    geom_bar(stat = 'identity') + facet_grid(isSNV~., scale = 'free_x') +
+    theme_bw() + theme(axis.text.x = element_text(size = 0)) # bw theme and no print of x axis labels
+@
+\caption{\label{fig:indelcounts} Plot of indel and snv counts across the set.  X-axis represents each subject, y-axis represents the count of events in each type (color, stacked).  The SNV are split from the indel calls by facets, TRUE indicates that the facet is for SNV while FALSE indicates that the facet is for indels (also derived by looking at color).}
+\end{figure}
+
+
+\begin{figure}[h]
+\centering
+<<fig_indelratio, fig = TRUE, echo = FALSE, height=8, width=8>>=
+ggplot(sidsum, aes(x=Tumor_Sample_Barcode, y=indelratio)) + 
+    geom_bar(stat = 'identity') +
+    theme_bw() + theme(axis.text.x = element_text(size = 0)) # bw theme and no print of x axis labels
+@
+\caption{\label{fig:indelratio} Plot of indel ratio versus snv across the set.  X-axis represents each subject, y-axis represents the proportion of indels for that subject.  }
+\end{figure}
+
+\section{Caller Per Chromosome}
+
+We set out to devise a method for comparing the call profile across studies and samples.  This may highlight samples with potentially failed runs or otherwise outlier mutation profiles from the perspective of a single caller.  We reasoned that the background rate of calling would be generally correct and would define the norm for the call set in question.  Thus, we are looking for sample:caller combinations that deviate significantly from that background rate.  While one option would be to examine the exact correlation in relative call numbers, this would require collapsing the variability of the entire set to the idealized proportion across the set for comparison.  Since the signal that we might be looking for is that a sample would have a high rate of calls in some chromosomes and a low rate in others (indicating a failure in calling somewhere along the process that suddenly halted file generation) we can just look at the overall distribution with a Kolmogorov-Smirnov test.
+
+Should an outlier be detected it will appear in Figure \ref{fig:outliers}.
+
+<<cpc>>=
+# collect the calls per pairkey, caller, and chromosome
+mm.chrom.count <- ddply(mm, .(Tumor_Sample_Barcode, Matched_Norm_Sample_Barcode), function(df){
+  
+  center_calls <- ldply(callers, function(caller){
+    ddf <- subset(df, grepl(caller, CENTERS))
+    rcount <- nrow(ddf)
+    chrcount <- ddply(ddf, .(Chromosome), function(dddf){
+      nvars <- nrow(dddf)
+      return(data.frame(nvars = nvars, relvars = nvars / rcount, rcount = rcount))
+    })
+    chrcount$Caller <- caller
+    return(chrcount)
+  })
+  return(center_calls)
+})
+
+# this is a key so that we can do future aggregation
+mm.chrom.count$CallKey <- factor(with(mm.chrom.count, paste(Tumor_Sample_Barcode, Caller, sep = "|")))
+
+mm.chrom.ks <- ddply(mm.chrom.count, .(Tumor_Sample_Barcode, Matched_Norm_Sample_Barcode), function(df){
+  if (length(chromosomes) > nrow(df)){
+    dfrel <- c(df$relvars, rep(0, length(chromosomes) - nrow(df)))
+  } else {
+    dfrel <- df$relvars
+  }
+  return(ddply(df, .(Caller), function(ddf){
+    # need to pad these with 0 in case there was no variant in a particular chromosome
+    if (length(chromosomes) > nrow(ddf)){
+        ddfrel <- c(ddf$relvars, rep(0, length(chromosomes) - nrow(ddf)))
+    } else {
+        ddfrel <- ddf$relvars
+    }
+    kst <- ks.test(ddfrel, mm.chrom.count$relvars)
+    ksts <- ks.test(ddfrel, dfrel)
+    return(data.frame(ks.p.glob = kst$p.value, ks.p.sub = ksts$p.value, min = min(ddf$relvars), max = max(ddf$relvars)))    
+  }))
+})
+mm.chrom.ks$CallKey <- factor(with(mm.chrom.ks, paste(Tumor_Sample_Barcode, Caller, sep = "|")))
+chrom.outliers <- subset(mm.chrom.ks, ks.p.glob < 0.05 & ks.p.sub < 0.05)
+
+# summary of outliers
+summary(factor(chrom.outliers$Caller))
+
+@
+
+\begin{figure}[h]
+\centering
+<<fig_outliers, fig=TRUE, echo=FALSE, height=16, width=16>>=
+if (nrow(chrom.outliers > 0)){
+  ggplot(subset(mm.chrom.count, Tumor_Sample_Barcode %in% chrom.outliers$Tumor_Sample_Barcode), aes(x=Chromosome, y=relvars, color = Caller, alpha = ifelse(CallKey %in% chrom.outliers$CallKey, 1, 0.05))) + geom_point() + facet_wrap(~Tumor_Sample_Barcode) + theme_bw() + labs(alpha = "Outlier")
+} else {
+  cat("No chromosomal outliers were observed.")
+}
+@
+\caption{\label{fig:chromoutliers} Plot (or lack thereof) of chromosomal outlier samples.  These sample:caller combinations do not fit either the background per chromosome call patern of the entire data or this particular sample.  Non-outlier calls are shown with faint dots for comparison.}
+\end{figure}
+
+\section{Allele Fraction Comparison}
+<<callsummary>>=
+mmnp <- mm
+mmnp$CENTERS <- factor(with(mmnp, ifelse(grepl('\\*', CENTERS), 'PINDEL*', as.character(CENTERS))))
+callersummary <- ldply(levels(mmnp$CENTERS)[!grepl('\\|', levels(mmnp$CENTERS))], function(cent){
+  cat(sprintf("%s\n", cent))
+  df <- subset(mmnp, grepl(cent, CENTERS))
+  return(ddply(df, .(Tumor_Sample_Barcode), function(ddf){
+    known <- sum(ddf$hqdbsnp)
+    novel <- nrow(ddf) - known
+    total <- nrow(ddf)
+    return(data.frame(Known = known, Novel = novel, Total = total, CENTERS = cent))
+  }))
+})
+@
+
+\begin{figure}[h]
+\centering
+<<fig_af, fig=TRUE, echo=FALSE, height=16, width=16>>=
+ggplot(mmnp, aes(x=NAF, y=TAF)) + stat_binhex() + theme_bw() + facet_wrap(~CENTERS) + geom_abline(intercept = 0, slope = 1) + scale_fill_gradientn(colours = rainbow(7), trans = 'log')
+@
+\caption{\label{fig:af} Tumor allele fraction versus Normal allele fraction by caller.  Higher normal allele fraction (NAF) would indicate an increased probability of either a germline variant or a systematic sequencing variant.}
+\end{figure}
+
+\section{High Quality dbSNP in Callset}
+
+
+The presense of high-quality dbSNP variants in the call set is an indication of germline leakage into the calls or overt contamination.  In general, we assume that the rate of contamination in the data should be relatively low and so higher rates of calling high-quality dbSNP variants would be from overcalling germline variants.  For this discussion, high-quality dbSNPs are the set of variants matching ``by1000|byFre|byHap''.
+
+\begin{figure}[h]
+\centering
+<<hqdbsnp, fig=TRUE, echo=FALSE, height=16, width=16>>=
+ggplot(callersummary, aes(x=log10(Total + 1), y=Novel / Total)) + stat_binhex() + theme_bw() + scale_fill_gradientn(colours = rainbow(7), trans = 'log') + facet_wrap(~CENTERS)
+@
+\caption{\label{fig:nt} Novel / Total rate versus number of variants detected.  The lower Novel / Total rate indicates either contamination or germline calls being included by a caller.}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+<<hqdbsnpsample, fig=TRUE, echo=FALSE, height=8, width=8>>=
+ggplot(callersummary, aes(x=Tumor_Sample_Barcode, y= Novel / Total, color = CENTERS)) + geom_point(alpha = 0.5) + theme_bw() + theme(axis.text.x = element_text(size = 0))
+
+@
+\caption{\label{fig:nt} Novel / Total rate versus number of variants detected.  The lower Novel / Total rate indicates either contamination or germline calls being included by a caller.}
+\end{figure}
+
+\section{Filtering}
+
+We present these MAF files to the larger PanCan group in an unfiltered form.  This is done so that the analysis working groups have the freedom to work with and explore the data free of any bias that may be introduced by the QC group.  The role of the QC group is to flag any samples that may not have passed calling for purely technical reasons or to isolate samples that did not run appropriately through a caller.  The role of the QC group is not to impose additional constraints on the callers.  For example, if a particular caller has a 50\% germline leakage those will not be filtered by the QC group because it is expected for that caller and is consistent across samples (see metrics above).  However, if a particular pair was run with the incorrect normal sample, that would be removed because it fails for technical reasons.
+
+However, we can propose some reasonable filters that one might want to impose for some specific purposes.  We include these filters and an analysis of their ramificaitons below.
+
+\subsection{Cohort filter}
+
+We have found that the removal of likely false positives is aided by the use of a cohort filter.  That is, if we called the position germline in a cohort, then it is likely either germline or at least not interesting in subsequent sets (caution: may remove alleles that predispose to cancer).
+
+<<cohortfilter>>=
+germline_sites <- read.delim(GERMLINESITES, header = F)
+germline_sites$key <- with(germline_sites, paste(V1, V2, V3, V4, V5, sep = '|'))
+mmnp$key <- with(mmnp, paste(Chromosome, Start_Position, End_Position, Reference_Allele, Tumor_Seq_Allele2, sep = '|'))
+mmnp$GermlineFilter <- with(mmnp, ifelse(key %in% germline_sites$key, 'CohortFilter', ifelse(hqdbsnp, 'dbSNP', 'PASS')))
+
+# what proportion of calls would be considered pass in this case
+prop.table(table(mmnp$GermlineFilter))
+
+# what cosmic variants might we be removing by this?
+mmnp$COSMIC_EXT <- factor(with(mmnp, paste(Hugo_Symbol, COSMIC, sep = '|')))
+summary(subset(mmnp, GermlineFilter != 'PASS' & ! grepl('NONE', COSMIC))$Hugo_Symbol)
+@
+
+\subsection{Quality Fitlers}
+
+Though each caller assigns a quality to each variant that it calls (and likely each non-reference position in the genome) there are some ``reasonable'' quality metrics that we might use to filter a variant (for certain analyses).
+
+\begin{itemize}
+    \item Normal total coverage - statistically if there are fewer than 7 reads there is about a 1\% chance that a heterozygous position will present as homozygous because you will randomly select the reference copy each of the 6 times.  We require that each variant have at least 7 total reads in the normal.
+    \item Normal variant allele fraction - while it is possible that you observe the variant read in the tumor either by random chance (sequence error) or because there are circulating tumor cells in the blood (or other appropriate normal)\footnote{Though this is really very very unlikely given the number of white cells in the blood relative to the number of circulating tumor cells that are detected by orthogonal methods.}, we should clamp this to the approximate error rate of the sequencing platform.  The approximate error rate is 1\% so any variant with a NAF greater than 1\% will be filtered.
+    \item Tumor variant allele fraction - though some groups may be interested in sub-clonal mutations\footnote{These, by definition, are not related to oncogenesis.} the error rate increases with lower variant allele fraction approaching the background error rate of sequencing (1\% above).  Variants with less than 4\% TAF are filtered.
+    \item Tumor variant count - the confidence with which a variant can be called increases with the number of times that the variant allele is observed.  To truly avoid many of the most common sequencing artifacts a variant should be observed on both strands of DNA and in various locations across the sequenced fragment requiring at least 3 reads to be considered a high quality variant.  Variants with less than 3 variant reads are filtered.
+\end{itemize}
+
+<<qualityfilter>>=
+mmnp$QualFilter <- factor(with(mmnp, ifelse(n_depth < 7, 'NTotCov', 
+        ifelse(NAF > 0.01, 'NAF',
+        ifelse(TAF < 0.04, 'TAF',
+        ifelse(t_alt_count < 3, 'TVarCov', 'PASS'))))), levels = c('PASS', 'NTotCov', 'TVarCov', 'NAF', 'TAF'))
+prop.table(table(mmnp$GermlineFilter, mmnp$QualFilter))
+summary(subset(mmnp, GermlineFilter == 'PASS' & QualFilter != 'PASS' & ! grepl('NONE', COSMIC))$Hugo_Symbol)
+
+## analysis by caller
+callerpass <- ldply(callers, function(x){
+    df <- subset(mmnp, grepl(x, CENTERS))
+    tb <- with(df, prop.table(table(factor(paste(GermlineFilter, QualFilter, sep = '/')))))
+    tdf <- as.data.frame(tb)
+    tdf$Caller <- x
+    return(tdf)
+})
+callerpass
+@
+
+\begin{figure}[h]
+\centering
+<<fig_passvars, fig = TRUE, echo = FALSE, height=8, width=8>>=
+ggplot(mmnp, aes(x=Tumor_Sample_Barcode, fill = factor(paste(GermlineFilter, QualFilter, sep = '/')))) + geom_bar(position = 'fill') + theme_bw() + 
+    theme(axis.text.x = element_text(size = 0)) + labs(fill = 'Filter status')
+@
+\caption{\label{fig:passvars} Impact of variant filtering across the cohort.  PASS/PASS indicates a pass in both the GermlineFilter and the QualFilter.  Other combinations are also indicated by color.  X-axis represents the subjects and the bars are the relative proportion of variants in each category.} 
+\end{figure}
+
+
+\begin{figure}[h]
+\centering
+<<fig_passvarscaller, fig = TRUE, echo = FALSE, height=8, width=8>>=
+ggplot(callerpass, aes(x=Var1, y=Caller, size = Freq, color = Freq)) + geom_point() + theme_bw() + 
+    theme(axis.text.x = element_text(angle = 90)) + labs(x = 'Filter status') + scale_size_area(max_size = 18) + 
+    scale_colour_gradientn(limits = c(0, 1), colours = topo.colors(10))
+@
+\caption{\label{fig:passvarscaller} Impact of variant filtering across the callers.  PASS/PASS indicates a pass in both the GermlineFilter and the QualFilter.  Other combinations are also indicated by color.  X-axis represents the subjects and the bars are the relative proportion of variants in each category.  Size (area) indicates the percentage of variants in each category.} 
+\end{figure}
+
+
+\subsection{Filtered MAF}
+
+Though we strongly encourage all groups to implement their own filtering scheme, for your convenience and further study we have written the marked MAF file to disk which can be examined.
+
+<<writefilter>>=
+write.table(mmnp, 'marked.merged.maf', sep = '\t', row.names = F, quote = F)
+@
+
+\clearpage
+\pagebreak
+
+\section{SessionInfo}
+<<sessionInfo>>=
+save.image('sessionimage.R')
+sessionInfo();
+@ 
+
+\end{document}
