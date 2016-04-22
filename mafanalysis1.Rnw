@@ -35,13 +35,20 @@ require(entropy)
 require(ggplot2)
 require(plyr)
 require(reshape2)
+require(GenomicRanges)
 # note when running that absolute paths should be used for the input files
 SWEAVEDOC <- args[1]
 MAFFILE <- args[2]
 GERMLINESITES <- args[3]
+TARGETFILE <- args[5]
 print(args)
 
 mm <- read.delim(MAFFILE, comment.char = '#')
+
+## immediately apply the 2 read PInDel filter
+mm <- subset(mm, !grepl("PINDEL", CENTERS) | t_alt_count > 2)
+
+targetbed <- read.delim(TARGETFILE, header = F)
 
 # re-header the maf file here, these are the manipulations that we will do to it that will be used later
 callers <- levels(factor(unlist(strsplit(gsub('\\*', '', as.character(mm$CENTERS)), "\\|"))))
@@ -77,6 +84,16 @@ mm$CENTERS <- factor(with(mm, sapply(as.character(CENTERS), function(x){
   s <- sort(s[!duplicated(s)])
   return(paste(s, collapse = '|'))
 })))
+mm$NCENTERS <- sapply(as.character(mm$CENTERS), function(x){ return(nchar(x) - nchar(gsub('\\|', '', x))) })
+mm$VarKey <- factor(with(mm, paste(Chromosome, Start_Position, Reference_Allele, Tumor_Seq_Allele2, sep = '|')))
+# filter to just the target region
+
+mm.grange <- with(mm, GRanges(seqnames = Chromosome, ranges = IRanges(Start_Position, end = End_Position), VarKey = VarKey))
+bed.grange <- with(targetbed, GRanges(seqnames = V1, ranges = IRanges(V2, V3)))
+
+mm.ol <- subsetByOverlaps(mm.grange, bed.grange)
+# subset the merged maf
+mm <- subset(mm, VarKey %in% mm.ol$VarKey)
 @
 
 \section{Basic Sample Assessment}
@@ -130,7 +147,7 @@ ggplot(sidsum, aes(x=Tumor_Sample_Barcode, y=indelratio)) +
 
 We set out to devise a method for comparing the call profile across studies and samples.  This may highlight samples with potentially failed runs or otherwise outlier mutation profiles from the perspective of a single caller.  We reasoned that the background rate of calling would be generally correct and would define the norm for the call set in question.  Thus, we are looking for sample:caller combinations that deviate significantly from that background rate.  While one option would be to examine the exact correlation in relative call numbers, this would require collapsing the variability of the entire set to the idealized proportion across the set for comparison.  Since the signal that we might be looking for is that a sample would have a high rate of calls in some chromosomes and a low rate in others (indicating a failure in calling somewhere along the process that suddenly halted file generation) we can just look at the overall distribution with a Kolmogorov-Smirnov test.
 
-Should an outlier be detected it will appear in Figure \ref{fig:outliers}.
+Should an outlier be detected it will appear in Figure \ref{fig:chromoutliers}.
 
 <<cpc>>=
 # collect the calls per pairkey, caller, and chromosome
@@ -214,6 +231,13 @@ ggplot(mmnp, aes(x=NAF, y=TAF)) + stat_binhex() + theme_bw() + facet_wrap(~CENTE
 \caption{\label{fig:af} Tumor allele fraction versus Normal allele fraction by caller.  Higher normal allele fraction (NAF) would indicate an increased probability of either a germline variant or a systematic sequencing variant.}
 \end{figure}
 
+\begin{figure}[h]
+\centering
+<<fig_mcaf, fig=TRUE, echo=FALSE, height=16, width=16>>=
+ggplot(mmnp, aes(x=NAF, y=TAF)) + stat_binhex() + theme_bw() + facet_wrap(~NCENTERS) + geom_abline(intercept = 0, slope = 1) + scale_fill_gradientn(colours = rainbow(7), trans = 'log')
+@
+\caption{\label{fig:mcaf} Tumor allele fraction versus Normal allele fraction by caller.  Higher normal allele fraction (NAF) would indicate an increased probability of either a germline variant or a systematic sequencing variant.}
+\end{figure}
 \section{High Quality dbSNP in Callset}
 
 
@@ -288,6 +312,16 @@ callerpass <- ldply(callers, function(x){
     return(tdf)
 })
 callerpass
+
+## analysis by number of callers
+ncallerpass <- ldply(1:max(mmnp$NCENTERS), function(x){
+    df <- subset(mmnp, NCENTERS == x)
+    tb <- with(df, prop.table(table(factor(paste(GermlineFilter, QualFilter, sep = '/'))))) 
+    tdf <- as.data.frame(tb)
+    tdf$NCaller <- x  
+    return(tdf) 
+})
+ncallerpass
 @
 
 \begin{figure}[h]
@@ -310,6 +344,16 @@ ggplot(callerpass, aes(x=Var1, y=Caller, size = Freq, color = Freq)) + geom_poin
 \caption{\label{fig:passvarscaller} Impact of variant filtering across the callers.  PASS/PASS indicates a pass in both the GermlineFilter and the QualFilter.  Other combinations are also indicated by color.  X-axis represents the subjects and the bars are the relative proportion of variants in each category.  Size (area) indicates the percentage of variants in each category.} 
 \end{figure}
 
+
+\begin{figure}[h]
+\centering
+<<fig_passncaller, fig = TRUE, echo = FALSE, height=8, width=8>>=
+ggplot(ncallerpass, aes(x=Var1, y=NCaller, size = Freq, color = Freq)) + geom_point() + theme_bw() + 
+    theme(axis.text.x = element_text(angle = 90)) + labs(x = 'Filter status') + scale_size_area(max_size = 18) + 
+    scale_colour_gradientn(limits = c(0, 1), colours = topo.colors(10))
+@
+\caption{\label{fig:passncaller} Impact of variant filtering across the number of callers.  PASS/PASS indicates a pass in both the GermlineFilter and the QualFilter.  Other combinations are also indicated by color.  X-axis represents the subjects and the bars are the relative proportion of variants in each category.  Size (area) indicates the percentage of variants in each category.} 
+\end{figure}
 
 \subsection{Filtered MAF}
 
