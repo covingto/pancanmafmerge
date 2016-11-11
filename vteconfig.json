@@ -1,0 +1,11 @@
+{"sample": {
+    "map": {
+        "2": "int(r['DP'][0]) > 0 and int(r['MRQ'][altindex]) > 1 and int(r['AQC'][altindex]) > 2 and safe_div(r['AC'][altindex], r['DP'][0]) > 0.04 and int(r['FC'][altindex]) > 1 and int(r['RC'][altindex]) > 1",
+        "1": "int(r['DP'][0]) > 0 and safe_div(r['AQC'][altindex], r['DP'][0]) > 0.01",
+        "0": "int(r['AC'][altindex]) < 1 and int(r['DP'][0]) > 10",
+        "-1": "True"
+        }, 
+    "order": ["2","1","0","-1"]
+    },
+ "record":{}
+}

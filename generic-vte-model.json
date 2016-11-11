@@ -1,0 +1,8 @@
+{
+    "TUMOR": "T",
+    "NORMAL": "N",
+    "TUMOR_VALIDATION": "T",
+    "NORMAL_VALIDATION": "N",
+    "TUMOR_VALIDATION_0": "T",
+    "NORMAL_VALIDATION_0": "N"
+}

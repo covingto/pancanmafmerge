@@ -1,0 +1,6 @@
+{
+    "_P_": {
+        "_T_": ["TUMOR", "TUMOR_VALIDATION", "T", "*TUMOR*"],
+        "_N_": ["NORMAL", "NORMAL_VALIDATION", "N", "*NORMAL*"]
+    }
+}

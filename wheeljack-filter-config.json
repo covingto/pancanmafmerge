@@ -1,0 +1,5 @@
+{
+    "samplefilter": [
+        "safe_float(sample['AC'][i]) > 1"
+    ]
+}
