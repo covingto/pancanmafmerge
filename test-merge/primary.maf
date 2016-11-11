@@ -1,0 +1,5 @@
+Chromosome	Start_Position	End_Position	Reference_Allele	Tumor_Seq_Allele1	Tumor_Seq_Allele2	Tumor_Sample_Barcode	Matched_Normal_Sample_Barcode	Verification_Status	Validation_Status	Mutation_Status	Note
+1	100	100	A	A	T	XXX	XXX	.	.	.	NoMerge
+1	110	110	A	A	T	XXX	XXX	.	.	.	to merge with primary
+1	110	110	A	A	T	YYY	YYY	.	.	.	no merge pos match but not sample
+1	110	110	A	A	G	XXX	XXX	.	.	.	no merge alt is different

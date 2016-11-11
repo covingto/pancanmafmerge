@@ -15,121 +15,127 @@
 # If the length of the marks for a variant key is zero, PASS is reported.
 
 import os, os.path, sys
-import csv
-from Queue import Queue
-from mergesort import mergesort
-import threading
+import csv, json
 
-
-def mafkeyfun(record):
-    return '|'.join([record['Tumor_Sample_Barcode'], record['Chromosome'], 
-                     record['Start_position'], record['End_position'], 
+def mafkeyfun(record, type=0):
+    if type == 0:
+        return '|'.join([record['Tumor_Sample_Barcode'], record['Chromosome'], 
+                     record['Start_Position'], record['End_Position'], 
                      record['Reference_Allele'], record['Tumor_Seq_Allele2']])
+    elif type == 1:
+        return '|'.join([record['Tumor_Sample_Barcode'], record['Matched_Norm_Sample_Barcode'], 
+                     record['Chromosome'], 
+                     record['Start_Position'], record['End_Position'], 
+                     record['Reference_Allele'], record['Tumor_Seq_Allele2']])
+
 
 def markkeyfun(record):
     return record[0]
 
-def batch(iter, keyfunction):
+def batch(iter):
     lastkey = None
     _batch = []
+    mafrecord = []
     for r in iter:
-        thiskey = keyfunction(r)
+        try:
+            thiskey = r[0]
+            thistype = r[1]
+            thisval = r[2:] # must be a 3 list
+        except Exception as inst:
+            log("Error parsing value: %s" % str(inst))
+            log(str(r))
+            continue
         if lastkey and thiskey != lastkey:
             # print 'yield batch %s' % lastkey
-            yield lastkey, _batch
+            yield mafrecord, sorted(list(set(_batch)))
             _batch = []
+            mafrecord = []
         lastkey = thiskey
-        _batch.append(r)
-    yield lastkey, _batch
+        if thistype == 'mafr':
+            mafrecord.append({k:v for k, v in [vv.split('|',1) for vv in thisval]})
+        elif thistype == 'filterr':
+            thisval = thisval[0]
+            _batch.extend(thisval.split(','))
+    yield mafrecord, sorted(list(set(_batch)))
 
-##
-# @param maf - sorted maf reader object
-# @param sorted_marks - PeekWrappeer wrapped sorted mark reader objects
-def merge(maf, sorted_marks):
-    batcher = batch(sorted_marks, markkeyfun)
-    mkey, mvals = batcher.next() 
-    for r in maf:
-        rkey = mafkeyfun(r)
-        # print "checking key %s" % rkey
-        while mkey is not None and rkey > mkey:
-            try:
-                mkey, mvals = batcher.next() 
-            except StopIteration:
-                mkey = mvals = None
-        if rkey == mkey:
-            # print "keymatch %s" % rkey
-            fkeys = []
-            for mv in mvals:
-                # print mv
-                fkeys.extend(mv[1].split(','))
-            fkeys = sorted(fkeys)
-            r['FILTER'] = ','.join(fkeys)
-        else:
-            r['FILTER'] = 'PASS'
-        yield r 
+
+def mainreduce(args):
+    reader = csv.reader(args.INPUT, delimiter = '\t')
+    mafreader = csv.DictReader(args.maf, delimiter = '\t')
+    fields = mafreader.fieldnames
+    if 'FILTER' not in fields:
+        fields.append('FILTER')
+    if 'NCALLERS' not in fields:
+        fields.append('NCALLERS')
+    writer = csv.DictWriter(args.output, fieldnames = fields, delimiter = '\t')
+    writer.writeheader()
+
+    for mrs, fset in batch(reader):
+        if not mrs:
+            continue
+        for mr in mrs:
+            centers = set(mr['CENTERS'].split('|'))
+            mr['NCALLERS'] = len(centers)
+            mr['CENTERS'] = '|'.join(centers)
+            if len(fset) > 0:
+                if args.append and 'FILTER' in mr and mr['FILTER'] != 'PASS':
+                    mr['FILTER'] = ','.join(sorted(list(set(fset) | set(mr['FILTER'].split(',')))))
+                else:
+                    mr['FILTER'] = ','.join(sorted(fset))
+            elif (not args.append) or ('FILTER' not in mr):
+                mr['FILTER'] = 'PASS'
+            writer.writerow(mr)
+
+def log(m):
+    sys.stderr.write(m + '\n')
+
+def mainmap(args):
+    if not args.maf:
+        log("--maf is a required argument")
+        sys.exit(2)
+    if not args.output:
+        log('--output is a required argument')
+        sys.exit(2)
+    if not args.type in (0,1):
+        log('--type must be either 0 or 1')
+        sys.exit(2)
+    writer = csv.writer(args.output, delimiter = '\t')
     
-def main(args):
-    sort_queue = Queue() # these are files that need to be sorted 
-    sorted_marks = []
-    
-    for markinput in args.MARKFILES:
-        sort_queue.put(markinput)
-    
-    def _t_sort_mark():
-        while True:
-            thisFile = sort_queue.get()
-            try:
-                # the PeekWrapper will call next() on init.
-                thisSort = mergesort.PeekWrapper(
-                                mergesort.mergesort(
-                                    csv.reader(open(thisFile, 'r'), delimiter = '\t'),
-                                    markkeyfun)
-                                )
-                sorted_marks.append(thisSort)
-                print "Mark sort completed: %s" % thisFile
-            finally:
-                sort_queue.task_done()
-    
-    for i in range(4):
-        t = threading.Thread(target=_t_sort_mark)
-        t.daemon = True 
-        t.start()
-    
-    print "Mark sorting started"
-    mafreader = csv.DictReader(open(args.maf, 'r'), delimiter = '\t')
-    maf = mergesort.PeekWrapper(mergesort.mergesort(
-                mafreader,
-                mafkeyfun))
-    print "MAF sorting is done"
-    sort_queue.join()
-    print "Mark sorting complete"
-    print "Writing"
-    with open(args.output, 'w') as fo:
-        fields = mafreader.fieldnames
-        if 'FILTER' not in fields:
-            fields.append('FILTER')
-        writer = csv.DictWriter(fo, fieldnames = fields, delimiter = '\t')
-        writer.writeheader()
-        for r in merge(maf, mergesort.mergepeek(sorted_marks, markkeyfun)):
-            writer.writerow(r)
-    print "Done"
+    log("Starting mark writing")
+    for markfile in args.MARKFILES:
+        with open(markfile, 'r') as fi:
+            reader = csv.reader(fi, delimiter = '\t')
+            for data in reader:
+                writer.writerow([data[0], 'filterr', data[1]])
+        log("wrote %s" % markfile)
+    mafreader = csv.DictReader(args.maf, delimiter = '\t')
+    for i, record in enumerate(mafreader):
+        writer.writerow([mafkeyfun(record, args.type), 'mafr'] + ['%s|%s' % (k, v) for k, v in record.items()])
+        if i % 100000 == 0:
+            log("processed %s maf records" % str(i))
+    log("Done with mapping")
 
 if __name__ == '__main__':
     import argparse
     
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--maf', type = str, help = 'input maf file')
-    parser.add_argument('--output', type = str, help = 'output maf file')
-    parser.add_argument('MARKFILES', nargs = '+', help = 'input mark files')
+    parsers = parser.add_subparsers()
+    map_parser = parsers.add_parser('map', help = 'run the map function')
+    map_parser.add_argument('--maf', type = argparse.FileType('r'), help = 'input maf file')
+    map_parser.add_argument('--type', type = int, default = 0, help = 'should the normal be used in the key, 0 = no, 1 = yes')
+    map_parser.add_argument('--output', type = argparse.FileType('w'), default = sys.stdout, help = 'output maf file')
+    map_parser.add_argument('MARKFILES', nargs = '+', help = 'input mark files')
+    map_parser.set_defaults(func=mainmap)
     
+    reduce_parser = parsers.add_parser('reduce', help = 'run the reduce function')
+    reduce_parser.add_argument('--maf', type = argparse.FileType('r'), help = 'maf file for headers')
+    reduce_parser.add_argument('INPUT', type = argparse.FileType('r'), nargs = '?', default = sys.stdin, help = 'mapped input')
+    reduce_parser.add_argument('--output', type = argparse.FileType('w'), help = 'output file')
+    reduce_parser.add_argument('--append', action = 'store_true', help = 'should the filters be appended?')
+    reduce_parser.set_defaults(func=mainreduce)
+
     args = parser.parse_args()
     
-    if not args.maf:
-        print "--maf is a required argument"
-        sys.exit(2)
-    if not args.output:
-        print '--output is a required argument'
-    
-    main(args)
+    args.func(args)
     

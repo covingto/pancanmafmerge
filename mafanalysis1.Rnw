@@ -84,7 +84,7 @@ mm$CENTERS <- factor(with(mm, sapply(as.character(CENTERS), function(x){
   s <- sort(s[!duplicated(s)])
   return(paste(s, collapse = '|'))
 })))
-mm$NCENTERS <- sapply(as.character(mm$CENTERS), function(x){ return(nchar(x) - nchar(gsub('\\|', '', x))) })
+mm$NCENTERS <- sapply(as.character(mm$CENTERS), function(x){ return(nchar(x) - nchar(gsub('\\|', '', x)) + 1) })
 mm$VarKey <- factor(with(mm, paste(Chromosome, Start_Position, Reference_Allele, Tumor_Seq_Allele2, sep = '|')))
 # filter to just the target region
 
@@ -94,6 +94,11 @@ bed.grange <- with(targetbed, GRanges(seqnames = V1, ranges = IRanges(V2, V3)))
 mm.ol <- subsetByOverlaps(mm.grange, bed.grange)
 # subset the merged maf
 mm <- subset(mm, VarKey %in% mm.ol$VarKey)
+mm$Study <- basename(dirname(MAFFILE))
+
+# write the table back out so that we can process that
+write.table(mm, 'masked.mafplus', sep = '\t', row.names = F, quote = F)
+
 @
 
 \section{Basic Sample Assessment}
@@ -258,6 +263,19 @@ ggplot(callersummary, aes(x=Tumor_Sample_Barcode, y= Novel / Total, color = CENT
 
 @
 \caption{\label{fig:nt} Novel / Total rate versus number of variants detected.  The lower Novel / Total rate indicates either contamination or germline calls being included by a caller.}
+\end{figure}
+
+\section{Multi-Center Consensus}
+
+Mulit-center consensus is shown in Figure \ref{fig:mcc}.
+
+\begin{figure}[h]
+\centering
+<<mcc, fig=TRUE, echo=FALSE, height=8, width=8>>=
+ggplot(mmnp, aes(x=CENTERS)) + geom_bar() + theme_bw() + theme(axis.text.x = element_text(angle = 90)) + facet_grid(.~NCENTERS, scale = 'free_x', space = 'free_x')
+
+@
+\caption{\label{fig:mcc} Multi-center consensus.  X-axis represents the center keys and y-axis is the number of variants falling into that bin.  Facets represent the number of callers participating in the call.}
 \end{figure}
 
 \section{Filtering}

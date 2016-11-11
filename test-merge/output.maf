@@ -1,0 +1,5 @@
+1	100	100	A	A	T	XXX	XXX	.	.	.	NoMerge	PRIMARY
+1	102	102	A	A	T	XXX	XXX	Verified	Valid	Somatic	ToPaste	PASTE
+1	110	110	A	A	T	XXX	XXX	.	.	.	to merge with primary	MERGE
+1	110	110	A	A	T	YYY	YYY	.	.	.	no merge pos match but not sample	PRIMARY
+1	110	110	A	A	G	XXX	XXX	.	.	.	no merge alt is different	PRIMARY

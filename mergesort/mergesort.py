@@ -60,8 +60,8 @@ def mergepeek(initers, keyfun):
         yield lastpeek.take()
     
         
-def mergesort(myiter, keyfun, maxrecords = 10000, maxpaths = 50):
-    tmpdir = tempfile.mkdtemp()
+def mergesort(myiter, keyfun, maxrecords = 100000, maxpaths = 10):
+    tmpdir = tempfile.mkdtemp('.mergesort', dir=os.path.abspath('.'))
     fnum = 0
     fpaths = []
     for c in chunk(myiter, maxrecords):
@@ -83,6 +83,8 @@ def mergesort(myiter, keyfun, maxrecords = 10000, maxpaths = 50):
                 # clean up the open file handles
                 for h in fhandles:
                     h.close()
+                for p in fpaths:
+                    os.remove(p) # we won't use these again
             fpaths = [_opath]
     fhandles = [open(p, 'r') for p in fpaths]
     for r in mergepeek(fhandles, lambda x: json.loads(x)['key']):

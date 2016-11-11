@@ -12,7 +12,7 @@ def ndepth(record):
     return None
 
 def varkey(record):
-    return '|'.join([record[k] for k in ('Tumor_Sample_Barcode', 'Chromosome', 'Start_Position', 
+    return '|'.join([record[k] for k in ('Tumor_Sample_Barcode', 'Matched_Norm_Sample_Barcode', 'Chromosome', 'Start_Position', 
                                          'End_Position', 'Reference_Allele', 'Tumor_Seq_Allele2')])
 
 def main(args):
