@@ -195,7 +195,7 @@ def mainreduce(args):
     # get the MAF header
     mafheader = [c.strip() for c in args.orgmaf.readline().split('\t')]
     outputheader = mafheader + VTEVALIDATIONHEADER
-    writer = csv.DictWriter(args.output, fieldnames = outputheader, delimiter = '\t')
+    writer = csv.DictWriter(args.output, fieldnames = outputheader, delimiter = '\t', restval='.')
 
     writer.writeheader()
 

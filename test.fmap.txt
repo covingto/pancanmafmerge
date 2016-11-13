@@ -1,6 +1,0 @@
-pkey	indel	snv
-fmap0	indel0.txt	snv0.txt
-fmap1	indel1.txt	snv1.txt
-fmap2	indel2.txt	snv2.txt
-fmap3	indel3.txt	snv3.txt
-fmap4	indel4.txt	snv4.txt
