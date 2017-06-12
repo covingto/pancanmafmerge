@@ -1,0 +1,29 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: VCF merge
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand: []
+        subprocess.check_call('export PERL5LIB=/hgsc_software/cancer-analysis/code/vep-82:/users/covingto/perl5/lib/perl5:$PERL5LIB && export PATH=/hgsc_software/cancer-analysis/code/vep-82/htslib:$PATH && /hgsc_software/perl/perl-5.16.2/bin/perl /hgsc_software/cancer-analysis/code/vep-82/ensembl-tools-release-82/scripts/variant_effect_predictor/variant_effect_predictor.pl --dir /hgsc_software/cancer-analysis/code/vep-82/cache/human/grch37 --format vcf --everything -i %(input)s -o %(output)s --cache --vcf --force_overwrite --check_existing --allow_non_variant --buffer_size 100 --offline --fork 2' % {
+            'input': fpath,
+            'output': tmpfile},
+            shell = True)
+
+inputs:
+  - id: keys
+    type: TODO string array?
+    prefix: --keys
+
+  - id: inputTODO
+    type: TODO file array?
+    position: 2
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO

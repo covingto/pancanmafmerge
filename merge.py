@@ -57,27 +57,35 @@ def filter(fpath, caller, tmpdir):
     if os.path.isfile(outputfpath):
         logger.info("Skipping filtering because %s exists", outputfpath)
         return outputfpath
+
     if caller.lower() == 'muse':
         logger.info("Applying MuSE filter to %s", fpath)
+
         subprocess.check_call('python %(PACKAGE)s/filter_muse.py --level 5 %(input)s %(output)s' % {
             'PACKAGE': PACKAGEDIR,
             'input': fpath,
             'output': tmpfile},
             shell = True)
+
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+
     elif caller.lower() == 'radia':
         logger.info("Applying RADIA filter to %s", fpath)
+
         subprocess.check_call('python %(PACKAGE)s/filter_radia.py %(input)s %(output)s' % {
             'PACKAGE': PACKAGEDIR,
             'input': fpath,
             'output': tmpfile},
             shell = True)
+
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+
     elif caller.lower() == "somaticsniper":
         nid, tid, nbar, tbar = getTNids(fpath)
         logger.info("Applying SomaticSniper filter to %s", fpath)
+
         subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s --vcf-tumor-id %(tid)s --vcf-normal-id %(nid)s' %{
             'PACKAGE': PACKAGEDIR,
             'input': fpath,
@@ -85,11 +93,14 @@ def filter(fpath, caller, tmpdir):
             'tid': tid,
             'nid': nid},
             shell = True)
+
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+
     elif caller.lower() == "varscans":
         nid, tid, nbar, tbar = getTNids(fpath)
         logger.info("Applying VarScan SNP filter to %s", fpath)
+
         subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s --vcf-tumor-id %(tid)s --vcf-normal-id %(nid)s' %{
             'PACKAGE': PACKAGEDIR,
             'input': fpath,
@@ -97,11 +108,14 @@ def filter(fpath, caller, tmpdir):
             'tid': tid,
             'nid': nid},
             shell = True)
+
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+
     elif caller.lower() == "varscani":
         nid, tid, nbar, tbar = getTNids(fpath)
         logger.info("Applying VarScan INDEL filter to %s", fpath)
+
         subprocess.check_call('perl %(PACKAGE)s/vcf2maf/vcf2vcf.pl --add-filter --input-vcf %(input)s --output-vcf %(output)s --vcf-tumor-id %(tid)s --vcf-normal-id %(nid)s' %{
             'PACKAGE': PACKAGEDIR,
             'input': fpath,
@@ -109,8 +123,10 @@ def filter(fpath, caller, tmpdir):
             'tid': tid,
             'nid': nid},
             shell = True)
+
         shutil.move(tmpfile, outputfpath)
         return outputfpath
+
     else:
         return fpath
 
@@ -120,13 +136,16 @@ def sort(fpath, tmpdir):
     if os.path.isfile(outputfpath):
         logger.info("Skipping sort because %s exists", outputfpath)
         return outputfpath
+
     logger.info("Sorting %s -> %s", fpath, outputfpath)
+
     subprocess.check_call('python %(PACKAGEDIR)s/vcf-sort.py %(seqdict)s %(input)s %(output)s' % {
         'PACKAGEDIR': PACKAGEDIR,
         'seqdict': '/hgsc_software/cancer-analysis/resources/references/human/hg19/hg19.dict',
         'input': fpath,
         'output': tmpfile},
         shell = True)
+
     shutil.move(tmpfile, outputfpath)
     return outputfpath
 
@@ -183,7 +202,9 @@ def v2v(fpath, tmpdir):
         logger.info("Skipping vcf reduction because %s exists", outputfpath)
         return outputfpath
     logger.info("vcf reduction of %s -> %s", fpath, outputfpath)
+
     nid, tid, nbar, tbar = getTNids(fpath)
+
     subprocess.check_call('/hgsc_software/perl/perl-5.16.2/bin/perl %(PACKAGEDIR)s/vcf2maf/vcf2vcf.pl --input-vcf %(input)s --output-vcf %(output)s --vcf-tumor-id %(tid)s --vcf-normal-id %(nid)s' % {
         'PACKAGEDIR': PACKAGEDIR,
         'input': fpath,
@@ -191,6 +212,7 @@ def v2v(fpath, tmpdir):
         'tid': tid,
         'nid': nid},
         shell = True)
+
     shutil.move(tmpfile, outputfpath)
     return outputfpath
 
@@ -201,12 +223,14 @@ def merge(outfile, mergefiles):
         logger.info("Skipping merge because %s exists", outputfpath)
         return outputfpath
     logger.info("Merging %s -> %s", mergefiles, outputfpath)
+
     subprocess.check_call('python %(PACKAGEDIR)s/vcf-merge.py --keys %(keys)s --output %(output)s %(inputs)s' % {
         'PACKAGEDIR': PACKAGEDIR,
         'keys': ' '.join([c for c, f in mergefiles]),
         'output': tmpfile,
         'inputs': ' '.join([f for c, f in mergefiles])},
         shell = True)
+
     shutil.move(tmpfile, outputfpath)
     return outputfpath
 
@@ -223,11 +247,14 @@ def annotate(fpath, tmpdir):
         logger.info("Skipping vep annotation because %s exists", vepannotation)
     else:
         logger.info("Processing vep annotation")
+
         subprocess.check_call('export PERL5LIB=/hgsc_software/cancer-analysis/code/vep-82:/users/covingto/perl5/lib/perl5:$PERL5LIB && export PATH=/hgsc_software/cancer-analysis/code/vep-82/htslib:$PATH && /hgsc_software/perl/perl-5.16.2/bin/perl /hgsc_software/cancer-analysis/code/vep-82/ensembl-tools-release-82/scripts/variant_effect_predictor/variant_effect_predictor.pl --dir /hgsc_software/cancer-analysis/code/vep-82/cache/human/grch37 --format vcf --everything -i %(input)s -o %(output)s --cache --vcf --force_overwrite --check_existing --allow_non_variant --buffer_size 100 --offline --fork 2' % {
             'input': fpath,
             'output': tmpfile},
             shell = True)
+
         shutil.move(tmpfile, vepannotation)
+
     subprocess.check_call('export JYTHONPATH=/hgsc_software/cancer-analysis/halotron/illumina/illumina_v0.0.2/halotron/site-packages && export CLASSPATH=/hgsc_software/cancer-analysis/code/javalib/sqlite-jdbc-3.8.11.2/sqlite-jdbc-3.8.11.2.jar:/hgsc_software/cancer-analysis/code/picard-tools-1.129/picard.jar:/hgsc_software/cancer-analysis/code/picard-tools-1.129/picard-lib.jar:/hgsc_software/cancer-analysis/code/picard-tools-1.129/htsjdk-1.129.jar:/hgsc_software/cancer-analysis/code/krcgtk/krcgtk-0.01.jar:$CLASSPATH && /stornext/snfs2/can/code/jython/jython-2.7.0/bin/jython -J-Xmx15g /hgsc_software/cancer-analysis/halotron/illumina/illumina_v0.0.2/halotron/illumina/annotation/annotate_vcf_cosmic.py --reference %(reference)s %(cosmic)s %(input)s %(valstatus)s %(output)s' % {
         'reference': '/hgsc_software/cancer-analysis/resources/references/human/hg19/hg19.fa',
         'cosmic': '/hgsc_software/cancer-analysis/resources/annotation-databases/cosmic/v71/CosmicCodingMuts.cnt3.vcf',
@@ -235,6 +262,7 @@ def annotate(fpath, tmpdir):
         'valstatus': '/hgsc_software/cancer-analysis/resources/dbsnp/hg19/146/dbSNP_b146_GRCh37p13.valstatus.db',
         'output': tmpfile},
         shell = True)
+
     logger.info("Processing %s complete", outputfpath)
     shutil.move(tmpfile, outputfpath)
     return outputfpath
@@ -247,6 +275,7 @@ def convert(opath, fpath):
         return outputfpath
     logger.info("Processing conversion of %s -> %s", fpath, outputfpath)
     nid, tid, nbar, tbar = getTNids(fpath)
+
     subprocess.check_call('/hgsc_software/perl/perl-5.16.2/bin/perl %(PACKAGEDIR)s/vcf2maf/vcf2maf.pl -no-annotate -input-vcf %(input)s -output-maf %(output)s -vcf-tumor-id %(tid)s -vcf-normal-id %(nid)s -tumor-id %(tbar)s -normal-id %(nbar)s -copythrough COSMIC,CENTERS,CONTEXT,DBVS' % {
         'input': fpath,
         'output': tmpfile,
@@ -256,6 +285,7 @@ def convert(opath, fpath):
         'nbar': nbar,
         'PACKAGEDIR': PACKAGEDIR},
         shell = True)
+
     shutil.move(tmpfile, outputfpath)
     return outputfpath
 
@@ -290,6 +320,8 @@ def main(args):
         message = 'Error in running merge.py (%s)\n\nTraceback was:\n%s\n' % (str(sys.argv), ' '.join(tb))
         notify(message)
         raise
+
+
 if __name__ == '__main__':
     import argparse
 

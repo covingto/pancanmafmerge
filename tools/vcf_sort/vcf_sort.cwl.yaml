@@ -1,0 +1,34 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: VCF Sort
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand: [python, /opt/bin/vcf-sort.py]
+
+%(seqdict)s %(input)s %(output)s' % {
+        'seqdict': '/hgsc_software/cancer-analysis/resources/references/human/hg19/hg19.dict',
+        'input': fpath,
+        'output': tmpfile},
+
+arguments:
+  - valueFrom: outputFileTODO
+    position: 3
+
+inputs:
+  - id: seqdict
+    type: File
+    position: 1
+
+  - id: inputTODO
+    type: File
+    position: 2
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO

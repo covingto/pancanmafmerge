@@ -1,0 +1,25 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: Filter MuSE
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand: [python, /opt/bin/filter_muse.py, --level 5]
+
+arguments:
+  - position: 5
+    valueFrom: outputFileTODO
+
+inputs:
+  - id: TODO_input_name
+    type: File
+    position: 4
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO

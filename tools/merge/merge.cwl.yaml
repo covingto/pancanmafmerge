@@ -1,0 +1,31 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: VCF merge
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand: [python, /opt/bin/vcf-merge.py]
+--keys %(keys)s --output /path/to/TODO/output.txt %(inputs)s' % {
+        'PACKAGEDIR': PACKAGEDIR,
+        'keys': ' '.join([c for c, f in mergefiles]),
+        'output': tmpfile,
+        'inputs': ' '.join([f for c, f in mergefiles])},
+        shell = True)
+
+inputs:
+  - id: keys
+    type: TODO string array?
+    prefix: --keys
+
+  - id: inputTODO
+    type: TODO file array?
+    position: 2
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO

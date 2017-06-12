@@ -1,0 +1,33 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: Filter Somaticsniper
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand: [perl, /opt/bin/vcf2maf/vcf2vcf.pl, --add-filter]
+
+arguments:
+  - valueFrom: outputFileTODO
+    prefix: --output-vcf
+
+inputs:
+  - id: TODO_input_name
+    type: File
+    prefix: --input-vcf
+
+  - id: TODO_vcf_tumor_id
+    type: string
+    prefix: --vcf-tumor-id
+
+  - id: TODO_vcf_normal_id
+    type: string
+    prefix: --vcf-normal-id
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO
