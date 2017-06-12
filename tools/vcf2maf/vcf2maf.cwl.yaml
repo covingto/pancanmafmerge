@@ -1,0 +1,43 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+label: 
+
+requirements:
+  - class: "DockerRequirement"
+    dockerImageId: "TODO"
+
+baseCommand:
+  - /hgsc_software/perl/perl-5.16.2/bin/perl
+  - /opt/bin/vcf2maf/vcf2maf.pl
+  - -no-annotate
+  - -output-maf /path/to/output/TODO
+  - -copythrough COSMIC,CENTERS,CONTEXT,DBVS
+
+inputs:
+  - id: input_vcf
+    prefix: -input-vcf
+    type: File
+
+  - id: vcf_tumor_id
+    prefix: -vcf-tumor-id
+    type: string ?
+
+  - id: vcf_normal_id
+    prefix: -vcf-normal-id
+    type: string ? TODO
+
+  - id: tumor_id
+    prefix: -tumor-id
+    type: string ? TODO
+
+  - id: normal_id
+    prefix: -normal-id
+    type: string ? TODO
+
+
+outputs:
+  - id: TODO_output_ID
+    type: File
+    outputBinding:
+      glob: outputFileTODO
